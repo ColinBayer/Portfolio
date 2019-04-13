@@ -1,1 +1,3 @@
-[I'm an inline-style link with title](https://www.google.com "Google's Homepage")
+# Interactive Flexdashboard using R-shiny to optimize Avocado Prices to Maximize Profit
+
+[Avocado Price Opt Dashboard](https://colinbayer.shinyapps.io/PortfolioDB/ "PriceOpt Dashboard")
