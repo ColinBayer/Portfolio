@@ -1,0 +1,278 @@
+---
+title: "Avocados - Sales Dashboard"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+```{r global, include=FALSE}
+###### Load in packages #########
+library(shiny)
+library(forecast)
+library(dplyr)
+library(readr)
+library(timeSeries)
+library(ggplot2)
+library(mgcv)
+library(knitr)
+library(lubridate)
+library(plotly)
+library(plyr)
+
+
+
+####### load Data #######
+avocado <- read.csv('avocado.csv')
+############### Data Clensing and adding new varibles ################
+######### Change year to factor variable ########
+avocado$year <- factor(avocado$year)
+
+############## Change Date to date type #######
+avocado$Date <- as.Date(avocado$Date)
+
+
+######### Delete index column (X) #########
+avocado$X <- NULL
+
+####### Reorder Date Varaible #######
+avocado <- avocado[order(avocado$Date), ]
+
+##### Create Weekday and month variable ######
+avocado$WeekDay <- factor(weekdays(avocado$Date))
+
+avocado$Month <- factor(months(avocado$Date))
+
+##### New State Column #####
+unique(avocado$region)
+
+avocado$State <- ifelse(avocado$region == "MiamiFtLauderdale" | avocado$region == "Orlando" | avocado$region == "Tampa" | avocado$region == "Jacksonville", "Florida", 
+                ifelse(avocado$region == "Boise", "Idaho", 
+                ifelse(avocado$region == "Chicago", "Illinois", 
+                ifelse(avocado$region == "Louisville", "Kentucky", 
+                ifelse(avocado$region == "NewOrleansMobile", "Louisiana", 
+                ifelse(avocado$region == "BaltimoreWashington", "Maryland", 
+                ifelse(avocado$region == "Boston", "Massachusetts", 
+                ifelse(avocado$region == "Detroit" | avocado$region == "GrandRapids" | avocado$region =="GreatLakes", "Michigan",
+                ifelse(avocado$region == "California" | avocado$region == "LosAngeles" |avocado$region =="Sacramento" |avocado$region=="SanDiego" | avocado$region =="SanFransisco", "California", 
+              ifelse(avocado$region=="Denver", "Colorado", 
+              ifelse(avocado$region=="HartfordSpringfield", "Connecticut", 
+              ifelse(avocado$region =="StLouis", "Missouri", 
+              ifelse(avocado$region=="Las Vegas" , "Nevada",
+              ifelse(avocado$region=="Seattle" |avocado$region=="Spokane", "Washington", 
+              ifelse(avocado$region=="SouthCarolina", "South Carolina", 
+              ifelse(avocado$region=="Harrisbugscranton" | avocado$region=="Philadelphia" |avocado$region=="Pittsburgh", "Pennsylvania", 
+              ifelse(avocado$region=="Portland", "Oregon", 
+              ifelse(avocado$region=="CincinnatiDayton" |avocado$region=="Columbus", "Ohio", 
+              ifelse(avocado$region == "PhoenixTucson", "Arizona",
+              ifelse(avocado$region == "Nashville", "Tennessee",
+              ifelse(avocado$region == "DallasFtWorth"|avocado$region =="Houston", "Texas",
+              ifelse(avocado$region == "Atlanta", "Georgia",
+              ifelse(avocado$region == "Indianapolis","Indiana",
+              ifelse(avocado$region == "RichmondNorfolk"|avocado$region =="Roanoke", "Virginia",
+              ifelse(avocado$region == "WestTexNewMexico","New Mexico",
+              ifelse(avocado$region == "Albany"|avocado$region =="BuffaloRochester"|avocado$region =="NewYork"|avocado$region =="Syracuse","New York",
+              ifelse(avocado$region == "Charlotte"|avocado$region =="RaleighGreensboro","North Carolina", "Other")))))))))))))))))))))))))))
+
+unique(avocado$State)
+   
+```
+
+
+Page 1: Time Series
+===================================== 
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+#### Create a sidebar panel with input variables for region, type, variable, time period, and the chart color ###
+fluidPage(
+  ##### Give a Title #####
+  titlePanel("Avocados: Time Series"),
+    
+  
+  #Create region choice drop down 
+  selectInput("region", label = "Region:", 
+               choices = unique(avocado$region), selected = "Albany"),
+             
+  #Choice Drop Down            
+    selectInput("type", label = "Type:", 
+      choices = unique(avocado$type), selected = "organic"), 
+  
+    #Variable Drop Down            
+    selectInput("Variable", label = "Variable:", 
+      choices = colnames(avocado)[2:10], selected = "AveragePrice"), 
+  
+  #Time 
+  sliderInput("time_adjust", label = "Time:", 
+              min = min(avocado$Date), max = max(avocado$Date), value = c(min(avocado$Date), max = max(avocado$Date)), step = 1), 
+  
+  # Color option only for Overview TS
+    selectInput("chartColor", label = "Chart Color", 
+                choices = c("red", "blue", "black", "green", "orange", "purple"), selected = "red")
+  
+)
+  
+```
+
+Row {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+
+### Time Series
+
+```{r}
+renderPlot({
+
+  ### Time series of a variable from the avocado data using the variable input side bar in the input panel ###
+  ### Adjust the data for only the inputted region, type, and time period ###
+ avocadoTS <- ts(avocado[avocado$region == input$region & avocado$type == input$type, input$Variable], start = c(year(input$time_adjust[1]), month(input$time_adjust[1])) , end = c(year(input$time_adjust[2]), month(input$time_adjust[2])) , frequency = 48)
+  
+ ### Fit the model using stl command which will plot a summary of time series that includes original time series, adjusted for seasonality, a trend line, and residuals  ###
+ fit <- stl(avocadoTS, s.window = "period")
+  plot(fit, col = input$chartColor)
+
+})
+```
+
+### Time Series
+
+```{r}
+renderPlot({
+
+### Create a single plot for the time series that more indepth and includes a trend line ###
+### Use the same process for inputs as the previous plot ###
+ggplot(data = avocado[avocado$region == input$region & avocado$type == input$type & avocado$Date >= input$time_adjust[1] & avocado$Date <= input$time_adjust[2],], aes_string(x = "Date", y = input$Variable, fill = input$Variable))+
+    geom_line(color = input$chartColor, size = 1.65)+
+    stat_smooth(
+  color = "#FC4E07", fill = "#FC4E07",
+  method = "loess")
+
+})
+
+```
+
+
+
+
+Page 2: Price Optimization
+===================================== 
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+#### Create sidebar pannel for the inputs for pice optimization for avocados which include: month, region, type, year, retail margin, and marginal cost ##
+fluidPage(
+  ##### Give a Title #####
+  titlePanel("Avocados: Price Optimization"),
+    
+  ## Month Dropdown ##
+  selectInput("monthOpt", label = "Month:", 
+              choices = unique(avocado$Month), selected = "January"),
+  
+  #Create region choice drop down 
+  selectInput("regionOpt", label = "Region:", 
+               choices = unique(avocado$region), selected = "Albany"),
+             
+  #Choice Drop Down            
+    selectInput("typeOpt", label = "Type:", 
+      choices = unique(avocado$type), selected = "organic"), 
+  
+  # Year Drop Down 
+  selectInput("yearOpt", label = "Year:",
+              choices = unique(avocado$year), selected = 2017),
+  
+  ##Retail Margin 
+  sliderInput("Retail_Margin_adjust", label = "Retail Margin", 
+              min = .01, max = .99, value = .15, step = .01), 
+  
+  ##Marginal Cost 
+  sliderInput("Marginal_Cost_adjust", label = "Marginal Cost", 
+              min = .01, max = max(avocado$AveragePrice), value = min(avocado$AveragePrice), step = .01)
+)
+  
+```
+
+Row {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+### Price/Demand Correlation 
+
+```{r}
+### Plot correlation between price and demand of avocados as well as a general trend line ###
+### Subsetted the data with the region and type ##
+### did not include month and year as the subset plot did not have enough points to visualioze ###
+
+renderPlot({
+plot(log(avocado[avocado$region == input$regionOpt & avocado$type == input$typeOpt,]$AveragePrice), log(avocado[avocado$region == input$regionOpt & avocado$type == input$typeOpt ,]$Total.Volume), xlab = "Price", ylab = "Demand", pch = 16, col = "Blue") + 
+    abline(lm(log(Total.Volume) ~ log(AveragePrice), data = avocado[avocado$region == input$regionOpt & avocado$type == input$typeOpt,]), col = 'red')
+
+
+})
+
+
+```
+
+
+
+### Price Optimization 
+
+```{r}
+#### Create a price optimization visual that goes through the following process: ###
+renderPlot({
+
+  ### Define a function that takes the following inputs: price, month, the model, the retail margin, and the marginal cost 
+  ### and puts of the predicted quantity, profit, and price for give quantity/profit 
+avocado_pft = function(price, Month, model, rm, mc) {
+  ## Create dataframe with prices and month
+  pred_DF = data.frame(AveragePrice = price, Month = Month)
+  ## Predict using model and the new dataframe create
+  logQ = predict(model,newdata=pred_DF)
+  ## Use logQ, price elaticty to predict the quantity ##
+  ## This formula is from a calculus optimization derivative
+  Q = exp(logQ+sigma(model)^2/2)
+  ## Use Q, mc, rm, and price to determine the profit 
+  profit = Q *(price*(1-rm)-mc)
+ 
+  return(list(Qdaily=Q,profit=profit, price = price))
+}
+
+### Next Define deman model use log of average price, log total volume, and month ##
+### Subset model using year, type, and region inputs from input pannel ##
+demand_model <- lm(log(Total.Volume) ~ log(AveragePrice) + Month , data = avocado[avocado$region == input$regionOpt & avocado$type == input$typeOpt & avocado$year == input$yearOpt,])
+## Create a vector of prices ranging from .5 to 3 in increments of .01 ##
+Price = seq(from = .5, to = 3, by =.01)
+## Creat an empty vector that it is the same length of the price vector ##
+pft = rep(0,length(Price))
+## Starting point 
+j = 1;
+
+## For loop through the prices and use the previously defined avocado_pft function ##
+## inputs are the p, input month, the demand model, the input retail margin, the input marginal cost ##
+## populate the index with the predicted profit ##
+for (p in Price) {
+  pft[j] = avocado_pft(p, input$monthOpt, demand_model, input$Retail_Margin_adjust, input$Marginal_Cost_adjust)$profit
+  j = j + 1
+}  
+
+### plot profits for each given price, which will show out optimal price ##
+plot(Price,pft,ylab="Profit", col = 'white', panel.first = grid(col = 'black', lty = 1)) + 
+  lines(Price,pft, col = 'red')+
+
+  ## include point that has max profit and that corresponding price ##
+  points(Price[which.max(pft)], max(pft), col = 'blue', pch = 20, cex = 3) 
+  
+### Should be noted that if price is inelastic if the abosulte value of log(price) coefficent is less than one ###
+### This means that our model will preidict that the highest price will lead to the highest profit ##
+## Either slowly increase price or look deeper into analyis ##
+
+})
+```
+
